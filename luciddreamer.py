@@ -42,7 +42,7 @@ from gaussian_renderer import render
 from scene import Scene, GaussianModel
 from scene.dataset_readers import loadCameraPreset
 from utils.loss import l1_loss, ssim
-from utils.camera import load_json
+from utils.camera import load_json, matrix2cam
 from utils.depth import colorize
 from utils.lama import LaMa
 from utils.trajectory import get_camerapaths, get_pcdGenPoses
@@ -172,6 +172,20 @@ class LucidDreamer:
         gallery, depth = self.render_video(render_camerapath, example_name=example_name)
         return (gaussians, gallery, depth)
 
+    def load(self, model_name=None, gaussianfile=None):
+        if self.for_gradio:
+            self.cleaner()
+            self.load_model(model_name)
+
+        outfile = gaussianfile
+        if not os.path.exists(outfile):
+            return "err path not exist"
+        else:
+            self.gaussians.load_ply(outfile)
+        #outfile = self.save_ply(outfile)
+
+        return outfile
+
     def create(self, rgb_cond, txt_cond, neg_txt_cond, pcdgenpath, seed, diff_steps, model_name=None, example_name=None):
         if self.for_gradio:
             self.cleaner()
@@ -217,6 +231,18 @@ class LucidDreamer:
             # Delete gsplat.ply if exists
             if os.path.exists('./gsplat.ply'):
                 os.remove('./gsplat.ply')
+    
+    def generate_image(self, image_name, camera_angle_x,cam_roll,cam_pitch,cam_yaw,cam_posx,cam_posy,cam_posz):
+        os.makedirs(os.path.join(self.root, 'images'), exist_ok=True)
+        imagepath = os.path.join(self.root,f'{image_name}_{self.timestamp}.png')
+
+        view = matrix2cam(camera_angle_x, [cam_yaw,cam_pitch,cam_roll], [cam_posx,cam_posy,cam_posz], self.cam.H, self.cam.W)
+        results = render(view, self.gaussians, self.opt, self.background)
+        frame = results['render']
+        
+        frame = np.round(frame.permute(1,2,0).detach().cpu().numpy().clip(0,1)*255.).astype(np.uint8)
+        imageio.imwrite(imagepath, frame)
+        return imagepath
 
     def render_video(self, preset, example_name=None, progress=gr.Progress()):
         if example_name and example_name != 'DON\'T':

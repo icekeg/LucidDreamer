@@ -81,3 +81,26 @@ def fov2focal(fov, pixels):
 
 def focal2fov(focal, pixels):
     return 2*math.atan(pixels/(2*focal))
+
+def euler2matrix(eulerangle,campos):
+    R_x = np.array([[1, 0, 0],
+                    [0, math.cos(eulerangle[0]), -math.sin(eulerangle[0])],
+                    [0, math.sin(eulerangle[0]), math.cos(eulerangle[0])]
+                    ])
+ 
+    R_y = np.array([[math.cos(eulerangle[1]), 0, math.sin(eulerangle[1])],
+                    [0, 1, 0],
+                    [-math.sin(eulerangle[1]), 0, math.cos(eulerangle[1])]
+                    ])
+ 
+    R_z = np.array([[math.cos(eulerangle[2]), -math.sin(eulerangle[2]), 0],
+                    [math.sin(eulerangle[2]), math.cos(eulerangle[2]), 0],
+                    [0, 0, 1]
+                    ])
+    R = np.dot(R_z, np.dot(R_y, R_x))
+    #R = np.concatenate((R,np.array([campos])), axis=1)
+    k = np.array([np.append(R[0],campos[0]),
+                 np.append(R[1],campos[1]),
+                 np.append(R[2],campos[2])
+                ])
+    return k

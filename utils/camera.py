@@ -15,11 +15,36 @@ import torch
 
 from scene.cameras import Camera, MiniCam
 from utils.general import PILtoTorch
-from utils.graphics import fov2focal, focal2fov, getWorld2View, getProjectionMatrix
+from utils.graphics import fov2focal, focal2fov, getWorld2View, getProjectionMatrix, euler2matrix
 
 
 WARNED = False
 
+def matrix2cam(camera_angle_x, eulerangle, campos, H, W):
+    #camtest = euler2matrix(eulerangle,campos)
+    FoVx = camera_angle_x
+    FoVy = focal2fov(fov2focal(FoVx, W), H)
+    zfar = 100.0
+    znear = 0.01
+    #c2w = np.array(cammatrix)
+    c2w = euler2matrix(eulerangle,campos)
+
+    # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
+    c2w[:3, 1:3] *= -1
+    if c2w.shape[0] == 3:
+        one = np.zeros((1, 4))
+        one[0, -1] = 1
+        c2w = np.concatenate((c2w, one), axis=0)
+
+    # get the world-to-camera transform and set R, T
+    w2c = np.linalg.inv(c2w)
+    R = np.transpose(w2c[:3, :3])  # R is stored transposed due to 'glm' in CUDA code
+    T = w2c[:3, 3]
+
+    w2c = torch.as_tensor(getWorld2View(R, T)).T.cuda()
+    proj = getProjectionMatrix(znear, zfar, FoVx, FoVy).T.cuda()
+    cam = MiniCam(W, H, FoVx, FoVy, znear, zfar, w2c, w2c @ proj)
+    return cam
 
 def load_json(path, H, W):
     cams = []
@@ -34,6 +59,8 @@ def load_json(path, H, W):
         for idx, frame in enumerate(frames):
             # NeRF 'transform_matrix' is a camera-to-world transform
             c2w = np.array(frame["transform_matrix"])
+            with open('readme.txt', 'w') as f:
+                f.write(str(frame["transform_matrix"]))
             # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
             c2w[:3, 1:3] *= -1
             if c2w.shape[0] == 3:
